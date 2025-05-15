@@ -17,7 +17,7 @@ const fileRotateTransport = new winston.transports.DailyRotateFile({
   maxFiles: "14d",
   format: winston.format.combine(
     winston.format.timestamp(),
-    winston.format.json()
+    winston.format.json(),
   ),
 });
 
@@ -25,14 +25,10 @@ const fileRotateTransport = new winston.transports.DailyRotateFile({
 const logger = winston.createLogger({
   level: process.env.NODE_ENV === "production" ? "info" : "debug",
   format: winston.format.combine(
-    winston.format.timestamp({
-      format: "YYYY-MM-DD HH:mm:ss",
-    }),
+    winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
+    winston.format.colorize(),
     winston.format.errors({ stack: true }),
-    winston.format.splat(),
-    winston.format.json()
   ),
-  defaultMeta: { service: "anpm-oracle" },
   transports: [
     // Console transport for development
     new winston.transports.Console({

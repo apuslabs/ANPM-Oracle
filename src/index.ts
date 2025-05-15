@@ -1,14 +1,14 @@
+import * as dotenv from "dotenv";
+// Load environment variables
+dotenv.config();
+
 import { AOProcess } from "./utils/AOProcess";
 import axios from "axios";
 import * as os from "os";
 import * as crypto from "crypto";
-import * as dotenv from "dotenv";
 import * as fs from "fs";
 import * as path from "path";
 import logger from "./utils/logger";
-
-// Load environment variables
-dotenv.config();
 
 // Path to .env file
 const envFilePath = path.join(__dirname, "..", ".env");
@@ -135,7 +135,7 @@ async function main() {
   });
 
   // Initialize connection to AO process
-  const poolProcess = new AOProcess(POOL_PROCESS_ID, true);
+  const poolProcess = new AOProcess(POOL_PROCESS_ID, false);
 
   // Process tasks in a continuous loop
   while (true) {
@@ -143,9 +143,22 @@ async function main() {
       logger.debug("Requesting pending task from Pool...");
 
       // Request a pending task from the Pool
+      // Dryrun a pending task from the Pool
+      // If there is pending tasks, then send real request
+      const hasPendingTaskResult = await poolProcess.dryRun({
+        Action: "Has-Pending-Task",
+      });
+
+      const hasPendingTaskResultTags = poolProcess.getTagsFromMessage(hasPendingTaskResult) || {};
+      if (hasPendingTaskResultTags.Code === "204") {
+        logger.info("No pending tasks available, Skipping...");
+        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL));
+        continue;
+      }
+
       const result = await poolProcess.sendMessage({
         Action: "Get-Pending-Task",
-        "X-Oracle-Node-Id": NODE_ID,
+        NodeID: NODE_ID,
       });
 
       const resultTags = poolProcess.getTagsFromMessage(result) || {};
@@ -189,7 +202,7 @@ async function main() {
           logger.info(`Task ${taskData.ref} response sent successfully`);
         }
       } else if (resultTags.Code === "204") {
-        logger.debug("No pending tasks available");
+        logger.info("No pending tasks available");
       } else if (resultTags.Code === "403") {
         logger.error(
           "Oracle not authorized. Make sure this Node ID is registered in the Pool"

@@ -4,6 +4,11 @@ import {
   dryrun,
   result as fetchResult,
 } from "@permaweb/aoconnect";
+import { readFileSync } from 'fs';
+
+const walletFilePath = process.env.WALLET || "~/.aos.json";
+const wallet = readFileSync(walletFilePath, { encoding: "utf-8" });
+const signer = createDataItemSigner(JSON.parse(wallet));
 
 export type MessageInput = {
   process: string;
@@ -252,7 +257,7 @@ export class AOProcess {
         // Using browser wallet for message signing
         const messageId = await message({
           ...options,
-          signer: createDataItemSigner((window as any).arweaveWallet),
+          signer,
         });
         msgResult = await fetchResult({
           message: messageId,
