@@ -94,7 +94,7 @@ async function runHyperBeamInference(
 
     // Only add config if it's provided
     if (config) {
-      queryParams.append("config", JSON.stringify(config));
+      queryParams.append("config", config);
     }
 
     logger.info(`Sending inference request to HyperBEAM`, {
