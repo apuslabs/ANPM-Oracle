@@ -14,7 +14,7 @@ export function receiveTask(nodeID: string): Promise<{
 }> {
   return requestHB<MessageResult>(PoolProcess, {
       Action: "Get-Pending-Task",
-      NodeID: nodeID,
+      Nodeid: nodeID,
   }).then(msg => {
     if (msg.Error) {
       throw new Error(msg.Error);
