@@ -2,13 +2,13 @@ import * as dotenv from "dotenv";
 // Load environment variables
 dotenv.config();
 
-import { AOProcess } from "./utils/AOProcess";
 import axios from "axios";
 import * as os from "os";
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import logger from "./utils/logger";
+import { hasPendingTask, receiveTask, sendTaskResponse } from "./utils/request";
 
 // Path to .env file
 const envFilePath = path.join(__dirname, "..", ".env");
@@ -31,6 +31,7 @@ if (NODE_ID === "") {
 } else {
   logger.info(`Using existing Node ID: ${NODE_ID}`);
 }
+
 
 /**
  * Generate a unique node ID
@@ -134,8 +135,7 @@ async function main() {
     hyperbeamUrl: HYPERBEAM_URL,
   });
 
-  // Initialize connection to AO process
-  const poolProcess = new AOProcess(POOL_PROCESS_ID, false);
+  
 
   // Process tasks in a continuous loop
   while (true) {
@@ -145,72 +145,34 @@ async function main() {
       // Request a pending task from the Pool
       // Dryrun a pending task from the Pool
       // If there is pending tasks, then send real request
-      const hasPendingTaskResult = await poolProcess.dryRun({
-        Action: "Has-Pending-Task",
-      });
-
-      const hasPendingTaskResultTags = poolProcess.getTagsFromMessage(hasPendingTaskResult) || {};
-      if (hasPendingTaskResultTags.Code === "204") {
+      const has = await hasPendingTask()
+      if (!has) {
         logger.info("No pending tasks available, Skipping...");
         await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL));
         continue;
       }
 
-      const result = await poolProcess.sendMessage({
-        Action: "Get-Pending-Task",
-        NodeID: NODE_ID,
+      const task = await receiveTask(NODE_ID);
+
+      logger.info(`Received task ${task.ref}`, {
+        prompt:
+        task.prompt.substring(0, 50) +
+          (task.prompt.length > 50 ? "..." : ""),
       });
 
-      const resultTags = poolProcess.getTagsFromMessage(result) || {};
+      // Process the task using HyperBEAM
+      logger.info(`Processing task ${task.ref} with HyperBEAM`);
+      const output = await runHyperBeamInference(
+        task.prompt,
+        task.config
+      );
 
-      // Check if we got a task
-      if (resultTags.Code === "200") {
-        const taskData = poolProcess.getDataFromMessage<{
-          ref: string;
-          prompt: string;
-          config?: any;
-        }>(result);
+      logger.info(`Task ${task.ref} completed, sending response...`);
 
-        if (taskData) {
-          logger.info(`Received task ${taskData.ref}`, {
-            prompt:
-              taskData.prompt.substring(0, 50) +
-              (taskData.prompt.length > 50 ? "..." : ""),
-          });
+      // Send the result back to the Pool
+      await sendTaskResponse(NODE_ID, task.ref, output);
 
-          // Process the task using HyperBEAM
-          logger.info(`Processing task ${taskData.ref} with HyperBEAM`);
-          const output = await runHyperBeamInference(
-            taskData.prompt,
-            taskData.config
-          );
-
-          logger.info(`Task ${taskData.ref} completed, sending response...`);
-
-          // Send the result back to the Pool
-          await poolProcess.sendMessage(
-            {
-              Action: "Task-Response",
-              "X-Oracle-Node-Id": NODE_ID,
-              "X-Reference": taskData.ref,
-            },
-            {
-              output,
-            }
-          );
-
-          logger.info(`Task ${taskData.ref} response sent successfully`);
-        }
-      } else if (resultTags.Code === "204") {
-        logger.info("No pending tasks available");
-      } else if (resultTags.Code === "403") {
-        logger.error(
-          "Oracle not authorized. Make sure this Node ID is registered in the Pool"
-        );
-        process.exit(1);
-      } else {
-        logger.warn(`Unexpected response from Pool`, { code: resultTags.Code });
-      }
+      logger.info(`Task ${task.ref} response sent successfully`);
 
       // Wait before polling again
       await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL));
