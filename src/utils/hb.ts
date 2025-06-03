@@ -1,10 +1,9 @@
-const { connect, createSigner } = require("@permaweb/aoconnect")
+const { connect, createSigner } = require("@permaweb/aoconnect");
 import axios from "axios";
 import { readFileSync } from "fs";
 import { AOMessageTag, MessageResult } from "./AOProcess.js";
 
-// const HB_NODE = "http://localhost:10000";
-const HB_NODE = "https://8c9916e3fb62763c-10000.us-ca-3.gpu-instance.novita.ai";
+const HB_NODE = process.env.HYPERBEAM_URL || "http://localhost:10000";
 
 const walletFilePath = process.env.WALLET || "~/.aos.json";
 const wallet = readFileSync(walletFilePath, { encoding: "utf-8" });
@@ -18,9 +17,9 @@ const ao = connect({
 export function requestHB<U>(
   processId: string,
   tags: Record<string, string>,
-  data?: string | Record<string, unknown>,
+  data?: string | Record<string, unknown>
 ): Promise<U> {
-    const params = {
+  const params = {
     type: "Message",
     path: `/${processId}~process@1.0/push/serialize~json@1.0`,
     method: "POST",
@@ -30,14 +29,17 @@ export function requestHB<U>(
     variant: "ao.N.1",
     target: processId,
   };
-  const params2 = Object.entries(params).filter(v => !!v[1]).reduce((acc, [key, value]) => {
-    acc[key] = typeof value === "object" ? JSON.stringify(value) : String(value);
-    return acc;
-  }, {} as Record<string, string>);
+  const params2 = Object.entries(params)
+    .filter((v) => !!v[1])
+    .reduce((acc, [key, value]) => {
+      acc[key] =
+        typeof value === "object" ? JSON.stringify(value) : String(value);
+      return acc;
+    }, {} as Record<string, string>);
 
   return ao
     .request(params2)
-    .then((res: { body: unknown; }) => {
+    .then((res: { body: unknown }) => {
       if (!res.body) {
         throw new Error("No response received");
       }
@@ -47,19 +49,26 @@ export function requestHB<U>(
         throw new Error("Could not parse response");
       }
     })
-    .then((resBody: { info: string; error: string | undefined; output: any; json: { error: string | undefined; body: U; }; }) => {
-      if (resBody?.info === "hyper-aos") {
-        if (resBody?.error) {
-          throw new Error(resBody.error);
+    .then(
+      (resBody: {
+        info: string;
+        error: string | undefined;
+        output: any;
+        json: { error: string | undefined; body: U };
+      }) => {
+        if (resBody?.info === "hyper-aos") {
+          if (resBody?.error) {
+            throw new Error(resBody.error);
+          }
+          return resBody.output;
+        } else {
+          if (resBody?.json?.error) {
+            throw new Error(resBody.json.error);
+          }
+          return resBody.json?.body as U;
         }
-        return resBody.output;
-      } else {
-        if (resBody?.json?.error) {
-          throw new Error(resBody.json.error);
-        }
-        return resBody.json?.body as U;
       }
-    })
+    )
     .then((output: unknown) => {
       if (!output) {
         throw new Error("No body in response");
@@ -97,13 +106,10 @@ export function extractMessage(msg: MessageResult, idx: number) {
   }
   const data = msg.Messages[idx];
   return {
-    tags: (data.Tags as AOMessageTag[]).reduce(
-      (acc, tag) => {
-        acc[tag.name] = tag.value;
-        return acc;
-      },
-      {} as Record<string, string>,
-    ),
+    tags: (data.Tags as AOMessageTag[]).reduce((acc, tag) => {
+      acc[tag.name] = tag.value;
+      return acc;
+    }, {} as Record<string, string>),
     data: data.Data,
   };
 }
