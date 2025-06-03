@@ -32,7 +32,6 @@ if (NODE_ID === "") {
   logger.info(`Using existing Node ID: ${NODE_ID}`);
 }
 
-
 /**
  * Generate a unique node ID
  * @returns {string} A unique identifier
@@ -135,8 +134,6 @@ async function main() {
     hyperbeamUrl: HYPERBEAM_URL,
   });
 
-  
-
   // Process tasks in a continuous loop
   while (true) {
     try {
@@ -145,7 +142,7 @@ async function main() {
       // Request a pending task from the Pool
       // Dryrun a pending task from the Pool
       // If there is pending tasks, then send real request
-      const has = await hasPendingTask()
+      const has = await hasPendingTask();
       if (!has) {
         logger.info("No pending tasks available, Skipping...");
         await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL));
@@ -156,15 +153,18 @@ async function main() {
 
       logger.info(`Received task ${task.ref}`, {
         prompt:
-        task.prompt.substring(0, 50) +
-          (task.prompt.length > 50 ? "..." : ""),
+          task.prompt.substring(0, 50) + (task.prompt.length > 50 ? "..." : ""),
       });
 
       // Process the task using HyperBEAM
       logger.info(`Processing task ${task.ref} with HyperBEAM`);
       const output = await runHyperBeamInference(
         task.prompt,
-        task.config
+        task.config ||
+          JSON.stringify({
+            n_gpu_layers: 48,
+            ctx_size: 20480,
+          })
       );
 
       logger.info(`Task ${task.ref} completed, sending response...`);
